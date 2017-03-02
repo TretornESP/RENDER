@@ -2,7 +2,7 @@
 //By Tretorn
 //GNU Licensing @ 2017
 //Ask for support at tretornesp@gmail.com
-//Version PRE-ALPHA PUBLIC RELEASE (27/02/2017)
+//Version PRE-ALPHA RELEASE V 0.1.2 (02/03/2017)
 
 
 // link ldi32, psapi.lib
@@ -57,15 +57,15 @@ const int   WIDTH_CORRECTOR  = 0;     //MODIFY IF SCENE IS NOT DISPLAYED CORRECT
 const int   HEIGHT_CORRECTOR = 0;
 const bool  DISPLAYFPS       = true;  //DISPLAY FPS COUNTER ON A CORNER OF THE SCREEN
 const bool  DISPLAYRAM       = true;  //DISPLAY RAM USAGE ON A CORNER OF THE SCREEN
+const bool  USE_BITBLT       = false; //USE BITBLT RENDERING METHOD (MEMORY EXHAUSTIVE)
 const bool  CANMAXIMIZE      = false; //SET IF PROGRAM WINDOW CAN BE MAXIMIZED
 const bool  MOUSECAPTURE     = false; //IF TRUE MOUSE WILL STAY AT THE CENTER OF THE WINDOW
 const bool  DEBUG            = true;  //IF FALSE DEBUG WINDOW WILL NOT SHOW UP
 
 const int   PIXEL_SIZE       = 4*8;  //SIZE OF EACH PIXEL IN RAM (DO NOT MODIFY!!!)
-const int   MAX_RES_X        = 840; /* MAX WINDOW WIDTH RESOLUTION. LESS USES LESS MEMORY
-APROXIMATED VALUES MUST BE THE RESOLUTION + 200
-THIS EXAMPLE VALUES ARE SET FOR A 640x480 RESOLUTION GAME. AND MAY CRASH IF render_init_fullscreen() is invoked */
-const int   MAX_RES_Y        = 680;
+int   MAX_RES_X        = 1920; /* MAX WINDOW WIDTH RESOLUTION. LESS USES LESS MEMORY
+APROXIMATED VALUES MUST BE THE RESOLUTION + 200 */
+int   MAX_RES_Y        = 1080;
 //ENGINE START
 
 int MAP_WIDTH; //SCENE PROPERTIES
@@ -83,6 +83,8 @@ short int _MOUSE_X_DIR, _MOUSE_Y_DIR; //MOUSE ACTUAL DIRECTION (-1 LEFT OR DOWN,
 bool NEED_REDRAW; //TRUE IF WINDOW RESIZED
 
 bool DESTROY; //TRUE IF DESTROYING AN OBJECT
+
+bool INVALID;
 
 bool _SPACE_PRESSED, _ESCAPE_PRESSED, _RIGHT_PRESSED, _LEFT_PRESSED, _UP_PRESSED, _DOWN_PRESSED,      //KEYBOARD AND MOUSE INPUT CODES
      _RIGHT_MOUSE_PRESSED, _LEFT_MOUSE_PRESSED, _CENTER_MOUSE_PRESSED, _ENTER_PRESSED, _SHIFT_PRESSED,
@@ -107,8 +109,8 @@ char RAM[10]; // RAM COUNTER
 
 clock_t t1, t2, t3; //CLOCK FOR FPS CALC
 
-COLORREF *SCENE = (COLORREF*) calloc(MAX_RES_X*MAX_RES_Y, sizeof(COLORREF));    //MAIN SCENE BUFFER
-COLORREF *SCENE_TMP = (COLORREF*) calloc(MAX_RES_X*MAX_RES_Y, sizeof(COLORREF)); //SECONDARY SCENE BUFFER
+COLORREF *SCENE;
+COLORREF *SCENE_TMP;
 
 struct RGB_t { //STRUCTURE FOR RGB COLORS
   int R; //RED
@@ -201,16 +203,25 @@ void render_init_fullscreen(char const* title) {
   cout << "[DEBUG] |    INITIAL RENDER CONFIG           " << endl;
   cout << "[DEBUG] | MAX FPS:                  " << MAX_FPS << endl;
   cout << "[DEBUG] | KEYBOARD DELAY:           " << KEYBOARD_DELAY << endl;
-  cout << "[DEBUG] | WIDTH / HEIGHY CORRECTOR: " << WIDTH_CORRECTOR << " / " << HEIGHT_CORRECTOR << endl;
+  cout << "[DEBUG] | WIDTH / HEIGHT CORRECTOR: " << WIDTH_CORRECTOR << " / " << HEIGHT_CORRECTOR << endl;
   cout << "[DEBUG] | DISPLAY FPS COUNTER:      " << DISPLAYFPS << endl;
   cout << "[DEBUG] | DISPLAY RAM USAGE:        " << DISPLAYRAM << endl;
   cout << "[DEBUG] | CAN MAXIMIZE WINDOW:      " << CANMAXIMIZE << endl;
   cout << "[DEBUG] | MOUSE IS CAPTURED:        " << MOUSECAPTURE << endl;
   cout << "[DEBUG] | DEBUG CONSOLE IS SHOWN:   " << DEBUG << endl;
   cout << "[DEBUG] +------------------------------------" << endl;
-  cout << "[DEBUG] | MAX RESOLUTION AVALIABLE IS: " << MAX_RES_X << "x" << MAX_RES_Y << endl;
 
   if (DEBUG==false) {FreeConsole();}
+
+  if (USE_BITBLT==false) {
+    RECT desktop;
+    HWND hDesktop = GetDesktopWindow();
+    GetWindowRect(hDesktop, &desktop);
+    MAX_RES_X = desktop.right;
+    MAX_RES_Y = desktop.bottom;
+  }
+
+  cout << "[DEBUG] MAX RESOLUTION AVALIABLE IS: " << MAX_RES_X << "x" << MAX_RES_Y << endl;
 
   HMONITOR hmon = MonitorFromWindow(GetActiveWindow(), MONITOR_DEFAULTTONEAREST);
   MONITORINFO mi = { sizeof(mi) };
@@ -226,9 +237,13 @@ void render_init_fullscreen(char const* title) {
   MAP_WIDTH=mi.rcMonitor.right+WIDTH_CORRECTOR;
   MAP_HEIGHT=mi.rcMonitor.bottom+HEIGHT_CORRECTOR;
 
+  SCENE = (COLORREF*) calloc(MAP_WIDTH*MAP_HEIGHT, sizeof(COLORREF));    //MAIN SCENE BUFFER
+
   ShowWindow( hwnd, SW_SHOWDEFAULT ) ;
   cout << "[DEBUG] WINDOW CREATED. WIDTH: " << MAP_WIDTH << " HEIGHT: " << MAP_HEIGHT << endl;
-  cout << "[DEBUG] MAP SIZE IS: " << (MAP_WIDTH*MAP_HEIGHT*PIXEL_SIZE)/1024 << "MB" << endl;
+  GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS*)&pmc, sizeof(pmc));
+  RAM_i = pmc.PrivateUsage;
+  cout << "[DEBUG] MEMORY USAGE: " << RAM_i/1024 << " MB" << endl;
   while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
     {
         TranslateMessage(&msg);
@@ -247,22 +262,29 @@ void render_init(int WIDTH, int HEIGHT, char const* titulo) {
   cout << "[DEBUG] |    INITIAL RENDER CONFIG           " << endl;
   cout << "[DEBUG] | MAX FPS:                  " << MAX_FPS << endl;
   cout << "[DEBUG] | KEYBOARD DELAY:           " << KEYBOARD_DELAY << endl;
-  cout << "[DEBUG] | WIDTH / HEIGHY CORRECTOR: " << WIDTH_CORRECTOR << " / " << HEIGHT_CORRECTOR << endl;
+  cout << "[DEBUG] | WIDTH / HEIGHT CORRECTOR: " << WIDTH_CORRECTOR << " / " << HEIGHT_CORRECTOR << endl;
   cout << "[DEBUG] | DISPLAY FPS COUNTER:      " << DISPLAYFPS << endl;
   cout << "[DEBUG] | DISPLAY RAM USAGE:        " << DISPLAYRAM << endl;
   cout << "[DEBUG] | CAN MAXIMIZE WINDOW:      " << CANMAXIMIZE << endl;
   cout << "[DEBUG] | MOUSE IS CAPTURED:        " << MOUSECAPTURE << endl;
   cout << "[DEBUG] | DEBUG CONSOLE IS SHOWN:   " << DEBUG << endl;
   cout << "[DEBUG] +------------------------------------" << endl;
-  cout << "[DEBUG] | MAX RESOLUTION AVALIABLE IS: " << MAX_RES_X << "x" << MAX_RES_Y << endl;
+  cout << "[DEBUG] MAX RESOLUTION AVALIABLE IS: " << MAX_RES_X << "x" << MAX_RES_Y << endl;
 
   if (DEBUG==false) {FreeConsole();}
 
-  HEIGHT=HEIGHT+HEIGHT_CORRECTOR;
   WIDTH=WIDTH+WIDTH_CORRECTOR;
+  HEIGHT=HEIGHT+HEIGHT_CORRECTOR;
+
+  if (USE_BITBLT==false) {
+    MAX_RES_X = WIDTH;
+    MAX_RES_Y = HEIGHT;
+  }
 
   MAP_WIDTH = WIDTH;
   MAP_HEIGHT = HEIGHT;
+
+  SCENE = (COLORREF*) calloc(MAP_WIDTH*MAP_HEIGHT, sizeof(COLORREF));    //MAIN SCENE BUFFER
 
   const char* const myclass = "myclass" ;
   w = { sizeof(WNDCLASSEX), (CS_HREDRAW|CS_VREDRAW), WindowProcedure,
@@ -287,7 +309,9 @@ void render_init(int WIDTH, int HEIGHT, char const* titulo) {
   }
   ShowWindow( hwnd, SW_SHOWDEFAULT ) ;
   cout << "[DEBUG] WINDOW CREATED. WIDTH: " << MAP_WIDTH << " HEIGHT: " << MAP_HEIGHT << endl;
-  cout << "[DEBUG] MAP SIZE IS: " << (MAP_WIDTH*MAP_HEIGHT*PIXEL_SIZE)/1024 << "MB" << endl;
+  GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS*)&pmc, sizeof(pmc));
+  RAM_i = pmc.PrivateUsage;
+  cout << "[DEBUG] MEMORY USAGE: " << RAM_i/1024 << " MB" << endl;
   while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
     {
         TranslateMessage(&msg);
@@ -329,16 +353,29 @@ void render_render() {
             RAM,
             10);
   }
-  BitBlt(hdc,
-         0,
-         0,
-         MAP_WIDTH,
-         MAP_HEIGHT,
-         src,
-         0,
-         0,
-         SRCCOPY);
-
+  if (USE_BITBLT==true) {
+    BitBlt(hdc,
+           0,
+           0,
+           MAP_WIDTH,
+           MAP_HEIGHT,
+           src,
+           0,
+           0,
+           SRCCOPY);
+  } else {
+    StretchBlt(hdc,
+               0,
+               0,
+               MAP_WIDTH,
+               MAP_HEIGHT,
+               src,
+               0,
+               0,
+               MAX_RES_X,
+               MAX_RES_Y,
+               SRCCOPY);
+  }
   DeleteDC(src);
   while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
     {
@@ -362,7 +399,11 @@ void render_quit() {
   PostQuitMessage(0);
   ReleaseDC(hwnd, hdc);
   DeleteDC(hdc);
-  exit(0);
+  if (DEBUG==false) {
+    exit(0);
+  } else {
+    system("pause");
+  }
 }
 
 void render_pixel(int WIDTH, int HEIGHT, int RED, int GREEN, int BLUE) {
@@ -417,6 +458,7 @@ void render_playsound(const char* file) {
 }
 
 void render_draw_shape(_Line shape) {
+  if (INVALID==true) {cout << "[DEBUG] INVALID OBJECT COORDENATES" << endl; return;}
   if (DESTROY==true) {cout << "[DEBUG] DESTROYING LINE OBJECT" << endl;}
   int X;
   int Y;
@@ -429,10 +471,12 @@ void render_draw_shape(_Line shape) {
     shape._StartPos.Y = shape._EndPos.Y;
     shape._EndPos.Y = tmp;
   }
+
   int X1=shape._StartPos.X;
   int X2=shape._EndPos.X;
   int Y1=shape._StartPos.Y;
   int Y2=shape._EndPos.Y;
+  cout << "[DEBUG] STARTING LINE CALCULATIONS" << endl;
   if (shape._StartPos.X==shape._EndPos.X) {
     if (shape._StartPos.Y==shape._EndPos.Y) {
       if (DESTROY==true) {
@@ -464,11 +508,6 @@ void render_draw_shape(_Line shape) {
     for (int i = shape._StartPos.X; i <= shape._EndPos.X; i++) {
       X = i;
       Y = (((X-X1)*(Y2-Y1))/(X2-X1))+Y1;
-      cout << "[DEBUG] STARTING LINE CALCULATIONS" << endl;
-      cout << "[DEBUG] X: " << X << " X1: " << X1 << " X2: " << X2 << " Y1: " << Y1 << " Y2 " << Y2 << endl;
-      cout << "[DEBUG] (((X-X1)*(Y2-Y1))/(X2-X1))+Y1: " << (((X-X1)*(Y2-Y1))/(X2-X1))+Y1 << endl;
-      cout << "[DEBUG] ----------------------------------------------" << endl;
-      cout << "[DEBUG] X:" << X << "Y:" << Y << endl;
       if (DESTROY==true) {
         SCENE[MAP_WIDTH*Y+X] = SCENE_TMP[MAP_WIDTH*Y+X];
       } else {
@@ -480,16 +519,10 @@ void render_draw_shape(_Line shape) {
 }
 
 void render_draw_shape(_Triangle shape) {
+  if (INVALID==true) {cout << "[DEBUG] INVALID OBJECT COORDENATES" << endl; return;}
   _Line tmp;
   cout << "[DEBUG] STARTING TRIANGLE CALCULATIONS" << endl;
   if (shape._solid==false) {
-    cout << "[DEBUG] *****************************" << endl;
-    cout << "[DEBUG] -----------------------------" << endl;
-    cout << "[DEBUG] " << "L1 Left(" << shape._LeftBottom.X << " ," << shape._LeftBottom.Y <<") Right (" << shape._RightBottom.X << " ," << shape._LeftBottom.Y << ")" << endl;
-    cout << "[DEBUG] -----------------------------" << endl;
-    cout << "[DEBUG] " << "L2 Left(" << shape._LeftBottom.X << " ," << shape._LeftBottom.Y <<") Top (" << shape._Top.X << " ," << shape._Top.Y << ")" << endl;
-    cout << "[DEBUG] -----------------------------" << endl;
-    cout << "[DEBUG] " << "L3 Right(" << shape._RightBottom.X << " ," << shape._RightBottom.Y <<") Top (" << shape._Top.X << " ," << shape._Top.Y << ")" << endl;
     tmp = render_createobject_line(shape._RGB.R, shape._RGB.G, shape._RGB.B, shape._LeftBottom.X, shape._LeftBottom.Y, shape._RightBottom.X, shape._RightBottom.Y);
     triangle_to_line(tmp);
     tmp = render_createobject_line(shape._RGB.R, shape._RGB.G, shape._RGB.B, shape._LeftBottom.X, shape._LeftBottom.Y, shape._Top.X, shape._Top.Y);
@@ -500,13 +533,6 @@ void render_draw_shape(_Triangle shape) {
     cout << "[DEBUG] " << "LEFT: (" << shape._LeftBottom.X << ", " << shape._LeftBottom.Y << ")" << endl;
     cout << "[DEBUG] " << "RIGHT: (" << shape._RightBottom.X << ", " << shape._RightBottom.Y << ")" << endl;
   } else {
-    cout << "[DEBUG] *****************************" << endl;
-    cout << "[DEBUG] -----------------------------" << endl;
-    cout << "[DEBUG] " << "L1 Left(" << shape._LeftBottom.X << " ," << shape._LeftBottom.Y <<") Right (" << shape._RightBottom.X << " ," << shape._LeftBottom.Y << ")" << endl;
-    cout << "[DEBUG] -----------------------------" << endl;
-    cout << "[DEBUG] " << "L2 Left(" << shape._LeftBottom.X << " ," << shape._LeftBottom.Y <<") Top (" << shape._Top.X << " ," << shape._Top.Y << ")" << endl;
-    cout << "[DEBUG] -----------------------------" << endl;
-    cout << "[DEBUG] " << "L3 Right(" << shape._RightBottom.X << " ," << shape._RightBottom.Y <<") Top (" << shape._Top.X << " ," << shape._Top.Y << ")" << endl;
     int X;
     int Y;
     int X1=shape._LeftBottom.X;
@@ -548,6 +574,7 @@ void render_draw_shape(_Triangle shape) {
 }
 
 void render_draw_shape(_Rectangle shape) {
+  if (INVALID==true) {cout << "[DEBUG] INVALID OBJECT COORDENATES" << endl; return;}
   cout << "[DEBUG] STARTING RECTANGLE CALCULATIONS" << endl;
   if (shape._solid==true) {
     for (int i = shape._LeftUpper.Y; i <= shape._RightBottom.Y; i++) {
@@ -587,6 +614,7 @@ void render_draw_shape(_Rectangle shape) {
 }
 
 void render_draw_shape(_Circle shape) {
+  if (INVALID==true) {cout << "[DEBUG] INVALID OBJECT COORDENATES" << endl; return;}
   cout << "[DEBUG] STARTING CIRCLE CALCULATIONS" << endl;
   int R=shape._radius;
   int CX=shape._Center.X;
@@ -597,14 +625,6 @@ void render_draw_shape(_Circle shape) {
     X=i;
     Y=sqrt((R*R)-(X-CX)*(X-CX))+CY;
     if (Y_tmp==0) {Y_tmp=Y;}
-    cout << "[DEBUG] X: " << X << " R: " << R << " CX: " << CX << " CY: " << CY << endl;
-    cout << "[DEBUG] R^2: " << R*R << endl;
-    cout << "[DEBUG] CX-X: " << CX-X << endl;
-    cout << "[DEBUG] (X-CX)^2: " << (X-CX)*(X-CX) << endl;
-    cout << "[DEBUG] (R^2)-((X-CX)^2): " << R*R-((X-CX)*(X-CX)) << endl;
-    cout << "[DEBUG] sqrt((R^2)-((X-CX)^2): " << sqrt((R*R)-(X-CX)*(X-CX)) << endl;
-    cout << "[DEBUG] sqrt((R^2)-((X-CX)^2)+CY: " << sqrt((R*R)-(X-CX)*(X-CX))+CY << endl;
-    cout << "[DEBUG] X:" << X << "Y:" << Y << endl;
     if (shape._solid==true) {
       if (Y>Y_tmp) {
         for (int j = Y; j >= Y_tmp; j--) {
@@ -661,7 +681,13 @@ void render_draw_shape(_Circle shape) {
 _Line render_createobject_line(int color_r, int color_g, int color_b,
                               int startpos_x, int startpos_y, int finishpos_x, int finishpos_y)
 {
+  bool invalid_t1=true;
+  bool invalid_t2=true;
+  if (startpos_y <= 0 || startpos_y >= MAP_HEIGHT || startpos_x <= 0 || startpos_x >= MAP_WIDTH) {INVALID=true;} else {invalid_t1=false;}
+  if (finishpos_y <= 0 || finishpos_y >= MAP_HEIGHT || finishpos_x <= 0 || finishpos_x >= MAP_WIDTH) {INVALID=true;} else {invalid_t2=false;}
+  if (invalid_t1==false && invalid_t2==false) {INVALID=false;}
   cout << "[DEBUG] CREATING LINE OBJECT" << endl;
+  cout << "[DEBUG] COORD: STARTPOS (" << startpos_x << "," << startpos_y << ") ENDPOS (" << finishpos_x << "," << finishpos_y << ")" << endl;
   _Line Line;
   Line._RGB.R=color_r;
   Line._RGB.G=color_g;
@@ -676,7 +702,15 @@ _Line render_createobject_line(int color_r, int color_g, int color_b,
 _Triangle render_createobject_triangle(bool solid, int color_r, int color_g, int color_b,
                                        int top_x, int top_y, int left_x, int left_y, int right_x, int right_y)
 {
+  bool invalid_t1=true;
+  bool invalid_t2=true;
+  bool invalid_t3=true;
+  if (top_y <= 0 || top_y >= MAP_HEIGHT || top_x <= 0 || top_x >= MAP_WIDTH) {INVALID=true;} else {invalid_t1=false;}
+  if (left_y <= 0 || left_y >= MAP_HEIGHT || left_x <= 0 || left_x >= MAP_WIDTH) {INVALID=true;} else {invalid_t2=false;}
+  if (right_y <= 0 || right_y >= MAP_HEIGHT || right_x <= 0 || right_x >= MAP_WIDTH) {INVALID=true;} else {invalid_t3=false;}
+  if (invalid_t1==false && invalid_t2==false && invalid_t3==false) {INVALID=false;}
   cout << "[DEBUG] CREATING TRIANGLE OBJECT" << endl;
+  cout << "[DEBUG] COORD: TOP (" << top_x << "," << top_y << ") left (" << left_x << "," << left_y << ") right (" << right_x << "," << right_y << ")" << endl;
   _Triangle Triangle;
   Triangle._solid=solid;
   Triangle._RGB.R=color_r;
@@ -695,7 +729,17 @@ _Rectangle render_createobject_rectangle(bool solid, int color_r, int color_g, i
                                    int LeftUpper_x, int LeftUpper_y, int RightUpper_x, int RightUpper_y,
                                    int LeftBottom_x, int LeftBottom_y, int RightBottom_x, int RightBottom_y)
 {
+  bool invalid_t1=true;
+  bool invalid_t2=true;
+  bool invalid_t3=true;
+  bool invalid_t4=true;
+  if (LeftUpper_y <= 0 || LeftUpper_y >= MAP_HEIGHT || LeftUpper_x <= 0 || LeftUpper_x >= MAP_WIDTH) {INVALID=true;} else {invalid_t1=false;}
+  if (RightUpper_y <= 0 || RightUpper_y >= MAP_HEIGHT || RightUpper_x <= 0 || RightUpper_x >= MAP_WIDTH) {INVALID=true;} else {invalid_t2=false;}
+  if (LeftBottom_y <= 0 || LeftBottom_y >= MAP_HEIGHT || LeftBottom_x <= 0 || LeftBottom_x >= MAP_WIDTH) {INVALID=true;} else {invalid_t3=false;}
+  if (RightBottom_y <= 0 || RightBottom_y >= MAP_HEIGHT || RightBottom_x <= 0 || RightBottom_x >= MAP_WIDTH) {INVALID=true;} else {invalid_t4=false;}
+  if (invalid_t1==false && invalid_t2==false && invalid_t3==false && invalid_t4==false) {INVALID=false;}
   cout << "[DEBUG] CREATING RECTANGLE OBJECT" << endl;
+  cout << "[DEBUG] COORD: LEFT TOP (" << LeftUpper_x << "," << LeftUpper_y << ") RIGHT TOP (" << RightUpper_x << "," << RightUpper_y << ") LEFT BOTTOM (" << LeftBottom_x << "," << LeftBottom_y << ") RIGHT BOTTOM (" << RightBottom_x << "," << RightBottom_y << ")" << endl;
   _Rectangle Rect;
   Rect._solid = solid;
   Rect._RGB.R=color_r;
@@ -715,7 +759,9 @@ _Rectangle render_createobject_rectangle(bool solid, int color_r, int color_g, i
 _Circle render_createobject_circle(bool solid, int color_r, int color_g, int color_b,
                                 int center_x, int center_y, int radius)
 {
+  if (center_y-radius <= 0 || center_y+radius >= MAP_HEIGHT || center_x-radius <= 0 || center_x+radius >= MAP_WIDTH) {INVALID=true;} else {INVALID=false;}
   cout << "[DEBUG] CREATING CIRCLE OBJECT" << endl;
+  cout << "[DEBUG] COORD: CENTER (" << center_x << "," << center_y << ") RADIUS: " << radius << endl;
   _Circle Circle;
   Circle._solid=solid;
   Circle._RGB.R=color_r;
